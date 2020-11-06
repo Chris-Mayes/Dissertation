@@ -1,0 +1,5 @@
+*.zip
+*.vscode
+pepsi2coke/
+datasets/
+checkpoints/
