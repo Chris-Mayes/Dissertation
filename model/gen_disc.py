@@ -84,17 +84,6 @@ def residual_block(
     x = layers.add([input_tensor, x])
     return x
 
-def efficientnet_block(
-    x,
-    activation,
-    kernel_size=(3, 3),
-    strides=(1, 1),
-    padding="valid",
-    use_bias=False,
-):
-    
-    return x
-    
 
 def downsample(
     x,
@@ -140,24 +129,39 @@ def upsample(
     return x
 
 def efficientnet_generator():
-    model = efn.EfficientNetB3(include_top=False, weights="imagenet", input_shape=(256, 256, 3))
+    model = efn.EfficientNetB3(
+        include_top=False,
+        weights="imagenet",
+        input_shape=(256, 256, 3))
     
-    # add new classifier layers
-    x = layers.Conv2DTranspose(filters=64, kernel_size=(3, 3), strides=(4, 4), use_bias=False)(model.layers[-36].output)
-    x = tfa.layers.InstanceNormalization()(x)
-    x = layers.Conv2DTranspose(filters=64, kernel_size=(3, 3), strides=(4, 4), use_bias=False)(x)
-    x = tfa.layers.InstanceNormalization()(x)
-    x = layers.Conv2DTranspose(filters=64, kernel_size=(3, 3), strides=(2, 2), use_bias=False)(x)
-    x = tfa.layers.InstanceNormalization()(x)
-    x = ReflectionPadding2D(padding=(3, 3))(x)
-    x = layers.Conv2D(3, (8, 8), padding="valid")(x)
-    x = layers.Activation("tanh")(x)
+    """
+    add pooling between conv2d and increase kernel_size(increases output for layer)
+    increase strides?
+    size of output (size of input - 1) * (stride) + kernel size
+    """
 
+    # add new classifier layers
+    x = layers.Conv2DTranspose(filters=640, kernel_size=(2, 2), strides=(2, 2), use_bias=False)(model.layers[-36].output)
+    x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1))(x)
+    x = tfa.layers.InstanceNormalization()(x)
+
+    x = layers.Conv2DTranspose(filters=160, kernel_size=(4, 4), strides=(4, 4), use_bias=False)(x)
+    x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1))(x)
+    x = tfa.layers.InstanceNormalization()(x)
+
+    x = layers.Conv2DTranspose(filters=40, kernel_size=(2, 2), strides=(2, 2), use_bias=False)(x)
+    x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1))(x)
+    x = tfa.layers.InstanceNormalization()(x)
+
+    x = layers.Conv2DTranspose(filters=3, kernel_size=(2, 2), strides=(2, 2), use_bias=False)(x)
+    x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1))(x)
+    x = tfa.layers.InstanceNormalization()(x)
+    
     # define new model
     model = Model(inputs=model.inputs, outputs=x)
 
-    #model.compile()
-    #model.summary()
+    model.compile()
+    model.summary()
     return model
 
 
