@@ -141,20 +141,20 @@ def efficientnet_generator():
     """
 
     # add new classifier layers
-    x = layers.Conv2DTranspose(filters=640, kernel_size=(2, 2), strides=(2, 2), use_bias=False)(model.layers[-36].output)
+    x = layers.Conv2DTranspose(filters=640, kernel_size=(2, 2), strides=(2, 2), use_bias=False)(model.output)
     x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1))(x)
     x = tfa.layers.InstanceNormalization()(x)
 
-    x = layers.Conv2DTranspose(filters=160, kernel_size=(4, 4), strides=(4, 4), use_bias=False)(x)
-    x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1))(x)
+    x = layers.Conv2DTranspose(filters=160, kernel_size=(8, 8), strides=(4, 4), use_bias=False)(x)
+    x = layers.MaxPooling2D(pool_size=(2, 2), strides=(2, 2))(x)
     x = tfa.layers.InstanceNormalization()(x)
 
-    x = layers.Conv2DTranspose(filters=40, kernel_size=(2, 2), strides=(2, 2), use_bias=False)(x)
-    x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1))(x)
+    x = layers.Conv2DTranspose(filters=40, kernel_size=(4, 4), strides=(4, 4), use_bias=False)(x)
+    x = layers.MaxPooling2D(pool_size=(2, 2), strides=(2, 2))(x)
     x = tfa.layers.InstanceNormalization()(x)
 
-    x = layers.Conv2DTranspose(filters=3, kernel_size=(2, 2), strides=(2, 2), use_bias=False)(x)
-    x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1))(x)
+    x = layers.Conv2DTranspose(filters=3, kernel_size=(4, 4), strides=(4, 4), use_bias=False)(x)
+    #x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1))(x)
     x = tfa.layers.InstanceNormalization()(x)
     
     # define new model
