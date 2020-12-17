@@ -19,8 +19,10 @@ import tensorflow_addons as tfa
 
 from tensorflow.keras.applications import EfficientNetB3
 from keras.models import Model
+from keras.layers import Activation
 import efficientnet.tfkeras
 import efficientnet.keras as efn 
+
 
 
 class ReflectionPadding2D(layers.Layer):
@@ -153,102 +155,87 @@ def efficientnet_generator():
     return model
 """
 
-def efficient_block(x, name):
+def efficient_block(input, name):
 
     efficientnet_model = efn.EfficientNetB3(
             include_top=False,
             weights="imagenet",
             input_shape=(256, 256, 3)
             )
-
-    x
     
     for layer in efficientnet_model.layers:
         layer._name = layer.name + str(name)
     
-    #efficientnet_model.trainable = False
     
+    x = ReflectionPadding2D()(input)
+    x = layers.Conv2D(144,kernel_size=(3,3),strides=(2,2),padding='valid',use_bias=False,)(x)
+    x = tfa.layers.InstanceNormalization()(x)
+    #x = layers.Activation("relu")(x)
+
+
     x = efficientnet_model.layers[30](x)
-   
     x = efficientnet_model.layers[31](x)
-    #x1 = efficientnet_model.layers[31](x)
-    #x = efficientnet_model.layers[32](x1)
-    #x = efficientnet_model.layers[33](x)
-    #x = efficientnet_model.layers[34](x)
-    #x2 = efficientnet_model.layers[35](x)
-    #x = tf.keras.layers.Multiply()([x1, x2])
 
     x = efficientnet_model.layers[37](x)
-    x5 = efficientnet_model.layers[38](x)
-    x = efficientnet_model.layers[39](x5)
+    x1 = efficientnet_model.layers[38](x)
+    x = efficientnet_model.layers[39](x1)
     x = efficientnet_model.layers[40](x)
     x = efficientnet_model.layers[41](x)
     x = efficientnet_model.layers[42](x)
     x = efficientnet_model.layers[43](x)
-    
-    x3 = efficientnet_model.layers[44](x)
-    #x = efficientnet_model.layers[45](x3)
-    #x = efficientnet_model.layers[46](x)
-    #x = efficientnet_model.layers[47](x)
-    #x4 = efficientnet_model.layers[48](x)
-    #x = tf.keras.layers.Multiply()([x3, x4])
-    
-    x = efficientnet_model.layers[50](x3)
-    x = efficientnet_model.layers[51](x)
+    x = efficientnet_model.layers[44](x)  
 
-    x6 = efficientnet_model.layers[52](x)
-    x9 = tf.keras.layers.Add()([x5, x6])
-    
-    x = efficientnet_model.layers[54](x)
-    #x = efficientnet_model.layers[54](x9)
+    x = efficientnet_model.layers[50](x)
+    x = efficientnet_model.layers[51](x)
+    x2 = efficientnet_model.layers[52](x)
+    x3 = tf.keras.layers.Add()([x1, x2]) #[53]
+
+    x = efficientnet_model.layers[54](x3)
+ 
     x = efficientnet_model.layers[55](x)
     x = efficientnet_model.layers[56](x)
     x = efficientnet_model.layers[57](x)
     x = efficientnet_model.layers[58](x)
-    
-    x7 = efficientnet_model.layers[59](x)
-    #x = efficientnet_model.layers[60](x7)
-    #x = efficientnet_model.layers[61](x)
-    #x = efficientnet_model.layers[62](x)
-    #x8 = efficientnet_model.layers[63](x)
-    #x = tf.keras.layers.Multiply()([x7, x8])
-    
-    x = efficientnet_model.layers[65](x7)
+    x = efficientnet_model.layers[59](x)
+
+    x = efficientnet_model.layers[65](x)
     x = efficientnet_model.layers[66](x)
-    x10 = efficientnet_model.layers[67](x)
-    x = tf.keras.layers.Add()([x9, x10])
-    
+    x4 = efficientnet_model.layers[67](x)
+    x = tf.keras.layers.Add()([x3, x4]) #[68]
     x = efficientnet_model.layers[69](x)
     x = efficientnet_model.layers[70](x)
     x = efficientnet_model.layers[71](x)
-    x = layers.Conv2DTranspose(144, kernel_size=(1,1), strides=(1,1), padding="same", use_bias=False)(x)
     
-    #model = keras.models.Model(inputs, x, name=name)
     """
     x=efficientnet_model.layers[29](x)
     for layer in efficientnet_model.layers[30:60]:
         x=layer(x)
     """
+
     return x
+
+
 
 def efficientnet_generator(
     filters = 64,
     name=None,
 ):
 
-    inputs = tf.keras.layers.Input(shape=[256,256,3])
-
-    x = ReflectionPadding2D(padding=(3, 3))(inputs)
-    x = layers.Conv2D(filters, (7, 7), use_bias=False)(x)
-    x = tfa.layers.InstanceNormalization()(x)
-    x = layers.Activation("relu")(x)
+    gamma_init = keras.initializers.RandomNormal(mean=0.0, stddev=0.02)
+    kernel_init = keras.initializers.RandomNormal(mean=0.0, stddev=0.02)
 
     #downsample
-    x = layers.Conv2D(64, kernel_size=(3,3), strides=(2,2), padding="same", use_bias=False)(x)
-    x = tfa.layers.InstanceNormalization()(x)
+    inputs = tf.keras.layers.Input(shape=[256,256,3])
+    x = ReflectionPadding2D(padding=(3, 3))(inputs)
+    x = layers.Conv2D(filters, (7, 7), kernel_initializer=kernel_init, use_bias=False)(x)
+    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
     x = layers.Activation("relu")(x)
-    x = layers.Conv2D(144, kernel_size=(3,3), strides=(2,2), padding="same", use_bias=False)(x)
-    x = tfa.layers.InstanceNormalization()(x)
+
+    x = layers.Conv2D(filters,(3,3),strides=(2,2),kernel_initializer=kernel_init,padding='same',use_bias=False,)(x)
+    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
+    x = layers.Activation("relu")(x)
+    x = layers.Conv2D(144,(3,3),strides=(2,2),kernel_initializer=kernel_init,padding='same',use_bias=False,)(x)
+    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
     x = layers.Activation("relu")(x)
 
     #efficient blocks
@@ -259,24 +246,24 @@ def efficientnet_generator(
     x = efficient_block(x, 'block3')
     x = efficient_block(x, 'block4')
     x = efficient_block(x, 'block5')
-    #x = efficient_block(x, 'block6')
+    x = efficient_block(x, 'block6')
     #x = efficient_block(x, 'block7')
     #x = efficient_block(x, 'block8')
     #x = efficient_block(x, 'block9')
 
 
     # Upsampling
-    x = layers.Conv2DTranspose(64, kernel_size=(3,3), strides=(2,2), padding="same", use_bias=False)(x)
-    x = tfa.layers.InstanceNormalization()(x)
+    x = layers.Conv2DTranspose(64,(3,3),strides=(2,2),padding='same',kernel_initializer=kernel_init,use_bias=False,)(x)
+    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
     x = layers.Activation("relu")(x)
-    x = layers.Conv2DTranspose(3, kernel_size=(3,3), strides=(2,2), padding="same", use_bias=False)(x)
-    x = tfa.layers.InstanceNormalization()(x)
+    x = layers.Conv2DTranspose(32,(3,3),strides=(2,2),padding='same',kernel_initializer=kernel_init,use_bias=False,)(x)
+    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
     x = layers.Activation("relu")(x)
 
-    # Final block
     x = ReflectionPadding2D(padding=(3, 3))(x)
     x = layers.Conv2D(3, (7, 7), padding="valid")(x)
     x = layers.Activation("tanh")(x)
+
 
     model = keras.models.Model(inputs, x, name=name)
     
