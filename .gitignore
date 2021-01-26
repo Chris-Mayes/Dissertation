@@ -3,3 +3,5 @@
 pepsi2coke/
 datasets/
 checkpoints/
+logs/
+model/stylegan.ipynb

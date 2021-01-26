@@ -23,6 +23,8 @@ from keras.layers import Activation
 import efficientnet.tfkeras
 import efficientnet.keras as efn 
 
+from keras.utils.vis_utils import plot_model
+
 
 
 class ReflectionPadding2D(layers.Layer):
@@ -168,10 +170,11 @@ def efficient_block(input, name):
     
     
     x = ReflectionPadding2D()(input)
-    x = layers.Conv2D(144,kernel_size=(3,3),strides=(2,2),padding='valid',use_bias=False,)(x)
+    #x = layers.Conv2D(144,kernel_size=(3,3),strides=(2,2),padding='same',use_bias=False,)(x)
+    x = layers.Conv2D(144, (3, 3), padding="valid")(x)
     x = tfa.layers.InstanceNormalization()(x)
     #x = layers.Activation("relu")(x)
-
+    
 
     x = efficientnet_model.layers[30](x)
     x = efficientnet_model.layers[31](x)
@@ -186,10 +189,12 @@ def efficient_block(input, name):
     x = efficientnet_model.layers[44](x)  
 
     x = efficientnet_model.layers[50](x)
+    x = layers.Dropout(0.3)(x)
     x = efficientnet_model.layers[51](x)
     x2 = efficientnet_model.layers[52](x)
     x3 = tf.keras.layers.Add()([x1, x2]) #[53]
-
+    
+    
     x = efficientnet_model.layers[54](x3)
  
     x = efficientnet_model.layers[55](x)
@@ -199,6 +204,7 @@ def efficient_block(input, name):
     x = efficientnet_model.layers[59](x)
 
     x = efficientnet_model.layers[65](x)
+    #x = layers.Dropout(0.3)(x)
     x = efficientnet_model.layers[66](x)
     x4 = efficientnet_model.layers[67](x)
     x = tf.keras.layers.Add()([x3, x4]) #[68]
@@ -206,6 +212,7 @@ def efficient_block(input, name):
     x = efficientnet_model.layers[70](x)
     x = efficientnet_model.layers[71](x)
     
+   
     """
     x=efficientnet_model.layers[29](x)
     for layer in efficientnet_model.layers[30:60]:
@@ -213,7 +220,6 @@ def efficient_block(input, name):
     """
 
     return x
-
 
 
 def efficientnet_generator(
@@ -235,8 +241,8 @@ def efficientnet_generator(
     x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
     x = layers.Activation("relu")(x)
     x = layers.Conv2D(144,(3,3),strides=(2,2),kernel_initializer=kernel_init,padding='same',use_bias=False,)(x)
-    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
-    x = layers.Activation("relu")(x)
+    x1 = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
+    x = layers.Activation("relu")(x1)
 
     #efficient blocks
 
@@ -266,9 +272,15 @@ def efficientnet_generator(
 
 
     model = keras.models.Model(inputs, x, name=name)
-    
+    plot_model(model, to_file='model_plot.png', show_shapes=True, show_layer_names=True)
+
     model.compile()
     model.summary()
+
+    efficientnet_generator.intermediate = Model(inputs, x1, name=name)
+
+    efficientnet_generator.intermediate.compile()
+
     return model
 
 
@@ -311,6 +323,7 @@ def get_resnet_generator(
     x = ReflectionPadding2D(padding=(3, 3))(x)
     x = layers.Conv2D(3, (7, 7), padding="valid")(x)
     x = layers.Activation("tanh")(x)
+    
 
     model = keras.models.Model(inputs, x, name=name)
     
