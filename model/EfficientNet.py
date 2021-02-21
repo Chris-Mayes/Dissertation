@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -28,7 +29,10 @@ from keras.utils.vis_utils import plot_model
 
 
 class ReflectionPadding2D(layers.Layer):
-    """Implements Reflection Padding as a layer.
+    """Implements Reflection Padding as a layer. Keras does not have a function that achieves this on its own so is 
+        implemented through a class that can be called as a layer. Reflection padding uses the contents of the image
+        matrices for the padding values. It 'reflects' the row into the padding and therefore ensures that the outputs
+        will transition smoothly into the padding rather than using values that may create a harsher edge.
 
     Args:
         padding(tuple): Amount of padding for the
@@ -54,14 +58,17 @@ class ReflectionPadding2D(layers.Layer):
         return tf.pad(input_tensor, padding_tensor, mode="REFLECT")
 
 
+
 def residual_block(
     x,
     activation,
     kernel_size=(3, 3),
     strides=(1, 1),
     padding="valid",
-    use_bias=False,
-):
+    use_bias=False):
+    """Residual block created for a baseline test using the guidance from the 'Unpaired Image-to-image Translation using Cycle-
+        consistent Adversarial Networks' paper."""
+
     dim = x.shape[-1]
     input_tensor = x
 
@@ -83,8 +90,8 @@ def downsample(
     kernel_size=(3, 3),
     strides=(2, 2),
     padding="same",
-    use_bias=False,
-):
+    use_bias=False):
+
     x = layers.Conv2D(
         filters,
         kernel_size,
@@ -104,8 +111,8 @@ def upsample(
     kernel_size=(3, 3),
     strides=(2, 2),
     padding="same",
-    use_bias=False,
-):
+    use_bias=False):
+
     x = layers.Conv2DTranspose(
         filters,
         kernel_size,
@@ -118,19 +125,15 @@ def upsample(
         x = activation(x)
     return x
 
-"""
 
-def efficientnet_generator():
+
+def complete_efficientnet_generator():
     model = efn.EfficientNetB3(
         include_top=False,
         weights="imagenet",
         input_shape=(256, 256, 3))
-    
-    ""
-    add pooling between conv2d and increase kernel_size(increases output for layer)
-    increase strides?
-    size of output (size of input - 1) * (stride) + kernel size
-    ""
+
+    """Complete EfficientNet model with upsampling to return dimensions to 256,256,3"""
 
     # add new classifier layers
     x = layers.Conv2DTranspose(filters=640, kernel_size=(2, 2), strides=(2, 2), use_bias=False)(model.output)
@@ -155,9 +158,10 @@ def efficientnet_generator():
     model.compile()
     model.summary()
     return model
-"""
 
-def efficient_block(input, name):
+
+def efficient_block_v1(input, name):
+    """EfficientNet taking layers 30-71 (all 64x64) and manually including the multiply and add layers"""
 
     efficientnet_model = efn.EfficientNetB3(
             include_top=False,
@@ -167,16 +171,77 @@ def efficient_block(input, name):
     
     for layer in efficientnet_model.layers:
         layer._name = layer.name + str(name)
-    
-    
-    x = ReflectionPadding2D()(input)
-    #x = layers.Conv2D(144,kernel_size=(3,3),strides=(2,2),padding='same',use_bias=False,)(x)
-    x = layers.Conv2D(144, (3, 3), padding="valid")(x)
-    x = tfa.layers.InstanceNormalization()(x)
-    #x = layers.Activation("relu")(x)
-    
 
-    x = efficientnet_model.layers[30](x)
+    x = efficientnet_model.layers[30](input)
+   
+    x1 = efficientnet_model.layers[31](x)
+    x = efficientnet_model.layers[32](x1)
+    x = efficientnet_model.layers[33](x)
+    x = efficientnet_model.layers[34](x)
+    x2 = efficientnet_model.layers[35](x)
+    x = tf.keras.layers.Multiply()([x1, x2])
+
+    x = efficientnet_model.layers[37](x)
+    x5 = efficientnet_model.layers[38](x)
+    x = efficientnet_model.layers[39](x5)
+    x = efficientnet_model.layers[40](x)
+    x = efficientnet_model.layers[41](x)
+    x = efficientnet_model.layers[42](x)
+    x = efficientnet_model.layers[43](x)
+    
+    x3 = efficientnet_model.layers[44](x)
+    x = efficientnet_model.layers[45](x3)
+    x = efficientnet_model.layers[46](x)
+    x = efficientnet_model.layers[47](x)
+    x4 = efficientnet_model.layers[48](x)
+    x = tf.keras.layers.Multiply()([x3, x4])
+    
+    x = efficientnet_model.layers[50](x)
+    x = efficientnet_model.layers[51](x)
+
+    x6 = efficientnet_model.layers[52](x)
+    x9 = tf.keras.layers.Add()([x5, x6])
+    
+    x = efficientnet_model.layers[54](x9)
+    x = efficientnet_model.layers[55](x)
+    x = efficientnet_model.layers[56](x)
+    x = efficientnet_model.layers[57](x)
+    x = efficientnet_model.layers[58](x)
+    
+    x7 = efficientnet_model.layers[59](x)
+    x = efficientnet_model.layers[60](x7)
+    x = efficientnet_model.layers[61](x)
+    x = efficientnet_model.layers[62](x)
+    x8 = efficientnet_model.layers[63](x)
+    x = tf.keras.layers.Multiply()([x7, x8])
+    
+    x = efficientnet_model.layers[65](x)
+    x = efficientnet_model.layers[66](x)
+    x10 = efficientnet_model.layers[67](x)
+    x = tf.keras.layers.Add()([x9, x10])
+    
+    x = efficientnet_model.layers[69](x)
+    x = efficientnet_model.layers[70](x)
+    x = efficientnet_model.layers[71](x)
+    x = layers.Conv2DTranspose(144, kernel_size=(1,1), strides=(1,1), padding="same", use_bias=False)(x)
+    
+    return x
+
+
+def efficient_block_v2(input, name):
+    """EfficientNet layers 30-71 (all 64x64) without using the multiply and add layers"""
+
+    efficientnet_model = efn.EfficientNetB3(
+            include_top=False,
+            weights="imagenet",
+            input_shape=(256, 256, 3)
+            )
+    
+    for layer in efficientnet_model.layers:
+        layer._name = layer.name + str(name)
+        
+
+    x = efficientnet_model.layers[30](input)
     x = efficientnet_model.layers[31](x)
 
     x = efficientnet_model.layers[37](x)
@@ -189,11 +254,10 @@ def efficient_block(input, name):
     x = efficientnet_model.layers[44](x)  
 
     x = efficientnet_model.layers[50](x)
-    x = layers.Dropout(0.3)(x)
+    x = layers.Dropout(0.5)(x) #try 0.5
     x = efficientnet_model.layers[51](x)
     x2 = efficientnet_model.layers[52](x)
     x3 = tf.keras.layers.Add()([x1, x2]) #[53]
-    
     
     x = efficientnet_model.layers[54](x3)
  
@@ -211,21 +275,66 @@ def efficient_block(input, name):
     x = efficientnet_model.layers[69](x)
     x = efficientnet_model.layers[70](x)
     x = efficientnet_model.layers[71](x)
+    x = layers.Conv2DTranspose(144, kernel_size=(1,1), strides=(1,1), padding="same", use_bias=False)(x)
     
-   
-    """
-    x=efficientnet_model.layers[29](x)
-    for layer in efficientnet_model.layers[30:60]:
-        x=layer(x)
-    """
+    return x
+
+
+def split(model, start, end, name):
+    """Splits the EfficientNet model based on a range defined by the start and end parameters. Allows all the features of the model remain 
+        while only keeping a small portion of the model. The previous implementations relied on manually separating the layers, likely reducing
+        performance"""    
+
+    confs = model.get_config()
+    kept_layers = set()
+    for i, l in enumerate(confs['layers']):
+        if i == 0:
+            confs['layers'][0]['config']['batch_input_shape'] = model.layers[start].input_shape
+            if i != start:
+                confs['layers'][0]['name']
+                confs['layers'][0]['config']['name'] = confs['layers'][0]['name']
+        elif i < start or i > end:
+            continue
+        kept_layers.add(l['name'])
+    # filter layers
+    layers = [l for l in confs['layers'] if l['name'] in kept_layers]
+    layers[1]['inbound_nodes'][0][0][0] = layers[0]['name']
+    # set conf
+    confs['layers'] = layers
+    confs['input_layers'][0][0] = layers[0]['name']
+    confs['output_layers'][0][0] = layers[-1]['name']
+    # create new model
+    submodel = Model.from_config(confs)
+    for l in submodel.layers:
+        orig_l = model.get_layer(l.name)
+        if orig_l is not None:
+            l.set_weights(orig_l.get_weights())
+    
+    for layer in submodel.layers:
+        layer._name = layer.name + str(name)
+
+    submodel._name = 'EfficientNet_' + str(name)
+    return submodel
+
+
+def efficient_block_v3(inputs, name):
+    """The efficient block used for the split function. Takes a layer as an input and returns a usable block of efficientnet"""
+
+    model = efn.EfficientNetB3(
+        include_top=False,
+        weights="imagenet",
+        input_shape=(256, 256, 3))
+    
+    block = split(model, 30, 71, name)(inputs)
+    x = tf.keras.layers.Dense(144)
+    x = layers.Conv2D(144, kernel_size=(1,1), strides=(1,1), padding="same", use_bias=False)(block)
 
     return x
 
 
-def efficientnet_generator(
-    filters = 64,
-    name=None,
-):
+def efficientnet_generator(filters=64, name=None):
+    """Full EfficientNet model used for image generation. Downsamples the 256,256,3 input image into 64x64x144. Run through the specified
+        number of EfficientNet blocks, and then upsampled back to 256,256,3"""
 
     gamma_init = keras.initializers.RandomNormal(mean=0.0, stddev=0.02)
     kernel_init = keras.initializers.RandomNormal(mean=0.0, stddev=0.02)
@@ -241,21 +350,20 @@ def efficientnet_generator(
     x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
     x = layers.Activation("relu")(x)
     x = layers.Conv2D(144,(3,3),strides=(2,2),kernel_initializer=kernel_init,padding='same',use_bias=False,)(x)
-    x1 = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
-    x = layers.Activation("relu")(x1)
+    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
+    x = layers.Activation("relu")(x)
 
-    #efficient blocks
+    #efficient_block_v3
 
-    #for _ in range(num_efficient_blocks):
-    x = efficient_block(x, 'block1')
-    x = efficient_block(x, 'block2')
-    x = efficient_block(x, 'block3')
-    x = efficient_block(x, 'block4')
-    x = efficient_block(x, 'block5')
-    x = efficient_block(x, 'block6')
-    #x = efficient_block(x, 'block7')
-    #x = efficient_block(x, 'block8')
-    #x = efficient_block(x, 'block9')
+    x = efficient_block_v3(x, 'block1')
+    x = efficient_block_v3(x, 'block2')
+    #x = efficient_block(x, 'block3')
+    #x = efficient_block(x, 'block4')
+    #x = efficient_block(x, 'block5')
+    #x = efficient_block(x, 'block6')
+    #x = efficient_block(x, '_block7')
+    #x = efficient_block(x, '_block8')
+    #x = efficient_block(x, '_block9')
 
 
     # Upsampling
@@ -276,11 +384,6 @@ def efficientnet_generator(
 
     model.compile()
     model.summary()
-
-    efficientnet_generator.intermediate = Model(inputs, x1, name=name)
-
-    efficientnet_generator.intermediate.compile()
-
     return model
 
 
@@ -289,8 +392,9 @@ def get_resnet_generator(
     num_downsampling_blocks=2,
     num_residual_blocks=5,
     num_upsample_blocks=2,
-    name=None,
-):
+    name=None):
+    """Standard ResNet implementation that is used in the CycleGAN paper for a baseline test"""
+
     inputs = tf.keras.layers.Input(shape=[256,256,3])
     x = ReflectionPadding2D(padding=(3, 3))(inputs)
     x = layers.Conv2D(filters, (7, 7), use_bias=False)(
@@ -335,16 +439,12 @@ def get_resnet_generator(
 def get_discriminator(
     filters=64, 
     num_downsampling=3, 
-    name=None
-    ):
+    name=None):
+    """Discriminator network based on the CycleGAN paper. Simply an image classifier that downsamples an image input
+        and returns a decision"""
     
     img_input = tf.keras.layers.Input(shape=[256,256,3], name=name + "_img_input")
-    x = layers.Conv2D(
-        filters,
-        (4, 4),
-        strides=(2, 2),
-        padding="same",
-    )(img_input)
+    x = layers.Conv2D(filters,(4, 4),strides=(2, 2),padding="same",)(img_input)
     x = layers.LeakyReLU(0.2)(x)
 
     num_filters = filters
@@ -367,10 +467,7 @@ def get_discriminator(
                 strides=(1, 1),
             )
 
-    x = layers.Conv2D(
-        1, (4, 4), strides=(1, 1), 
-        padding="same"
-    )(x)
+    x = layers.Conv2D(1, (4, 4), strides=(1, 1), padding="same")(x)
 
     model = keras.models.Model(inputs=img_input, outputs=x, name=name)
     #model.compile()
