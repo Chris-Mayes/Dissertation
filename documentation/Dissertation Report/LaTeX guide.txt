@@ -1,0 +1,30 @@
+\section{section name} = Create new section with heading
+
+\subsection{subsection name} = New subsection under the last created section
+
+\file{file name} = Formatting for file names within text
+
+\url{url} = Formatting for clickable url in text
+
+\begin{itemize}
+\item 'text'
+\end{itemize}	= Bullet point list where 'text' is the contents
+
+\keyword{keyword text} -- = Creates a bold, indented keyword with dash
+
+\emph{text to be emphasised} = Creates italic text
+
+\ldots = used for ellipsis (...)
+
+\parencite{Reference in bibliography} = In text citations
+
+
+\begin{figure}[th]
+\centering
+\includegraphics{Figures/image_name}
+\decoRule
+\caption[Logo]{Caption describing Image}
+\label{fig:logo}
+\end{figure} 					= Adding image.
+
+\equation

@@ -280,7 +280,7 @@ def efficient_block_v2(input, name):
     return x
 
 
-def split(model, start, end, name):
+def split_model(model, start, end, name):
     """Splits the EfficientNet model based on a range defined by the start and end parameters. Allows all the features of the model remain 
         while only keeping a small portion of the model. The previous implementations relied on manually separating the layers, likely reducing
         performance"""    
@@ -296,7 +296,7 @@ def split(model, start, end, name):
         elif i < start or i > end:
             continue
         kept_layers.add(l['name'])
-    # filter layers
+    # filter layers 
     layers = [l for l in confs['layers'] if l['name'] in kept_layers]
     layers[1]['inbound_nodes'][0][0][0] = layers[0]['name']
     # set conf
@@ -325,7 +325,7 @@ def efficient_block_v3(inputs, name):
         weights="imagenet",
         input_shape=(256, 256, 3))
     
-    block = split(model, 30, 71, name)(inputs)
+    block = split_model(model, 30, 71, name)(inputs)
     x = tf.keras.layers.Dense(144)
     x = layers.Conv2D(144, kernel_size=(1,1), strides=(1,1), padding="same", use_bias=False)(block)
 
@@ -355,15 +355,15 @@ def efficientnet_generator(filters=64, name=None):
 
     #efficient_block_v3
 
-    x = efficient_block_v3(x, 'block1')
-    x = efficient_block_v3(x, 'block2')
-    #x = efficient_block(x, 'block3')
-    #x = efficient_block(x, 'block4')
-    #x = efficient_block(x, 'block5')
-    #x = efficient_block(x, 'block6')
-    #x = efficient_block(x, '_block7')
-    #x = efficient_block(x, '_block8')
-    #x = efficient_block(x, '_block9')
+    x = efficient_block_v1(x, 'block1')
+    #x = efficient_block_v1(x, 'block2')
+    #x = efficient_block_v1(x, 'block3')
+    #x = efficient_block_v1(x, 'block4')
+    #x = efficient_block_v1(x, 'block5')
+    #x = efficient_block_v1(x, 'block6')
+    #x = efficient_block_v1(x, 'block7')
+    #x = efficient_block_v1(x, 'block8')
+    #x = efficient_block_v1(x, 'block9')
 
 
     # Upsampling
@@ -470,8 +470,8 @@ def get_discriminator(
     x = layers.Conv2D(1, (4, 4), strides=(1, 1), padding="same")(x)
 
     model = keras.models.Model(inputs=img_input, outputs=x, name=name)
-    #model.compile()
-    #model.summary()
+    model.compile()
+    model.summary()
     return model
 
   
