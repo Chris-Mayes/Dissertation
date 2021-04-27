@@ -5,4 +5,4 @@ datasets/
 checkpoints/
 logs/
 model/stylegan.ipynb
-documentation/Training_outputs/Testing/Resnet_Baseline/
+documentation/Training_outputs
