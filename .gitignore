@@ -5,4 +5,5 @@ datasets/
 checkpoints/
 logs/
 model/stylegan.ipynb
+model/tests.py
 documentation/Training_outputs

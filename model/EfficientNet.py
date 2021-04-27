@@ -401,12 +401,12 @@ def get_resnet_generator(
     model.summary()
     return model
 
-"""
+
 def get_discriminator(
     filters=64,  
     name=None):
-    Discriminator network based on the CycleGAN paper. Simply an image classifier that downsamples an image input
-    and returns a decision
+    """Discriminator network based on the CycleGAN paper. Simply an image classifier that downsamples an image input
+    and returns a decision"""
     
     img_input = tf.keras.layers.Input(shape=[256,256,3], name=name + "_img_input")
     x = layers.Conv2D(filters,(4, 4),strides=(2, 2),padding="same")(img_input)
@@ -431,44 +431,4 @@ def get_discriminator(
     model.summary()
     return model
 
-
-
-"""
-def get_discriminator(
-    filters=64, 
-    num_downsampling=3, 
-    name=None):
-    """Discriminator network based on the CycleGAN paper. Simply an image classifier that downsamples an image input
-    and returns a decision"""
-    
-    img_input = tf.keras.layers.Input(shape=[256,256,3], name=name + "_img_input")
-    x = layers.Conv2D(filters,(4, 4),strides=(2, 2),padding="same",)(img_input)
-    x = layers.LeakyReLU(0.2)(x)
-
-    num_filters = filters
-    for num_downsample_block in range(3):
-        num_filters *= 2
-        if num_downsample_block < 2:
-            x = downsample(
-                x,
-                filters=num_filters,
-                activation=layers.LeakyReLU(0.2),
-                kernel_size=(4, 4),
-                strides=(2, 2),
-            )
-        else:
-            x = downsample(
-                x,
-                filters=num_filters,
-                activation=layers.LeakyReLU(0.2),
-                kernel_size=(4, 4),
-                strides=(1, 1),
-            )
-
-    x = layers.Conv2D(1, (4, 4), strides=(1, 1), padding="same")(x)
-
-    model = keras.models.Model(inputs=img_input, outputs=x, name=name)
-    model.compile()
-    model.summary()
-    return model
 
