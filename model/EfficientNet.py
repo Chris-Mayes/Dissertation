@@ -28,7 +28,7 @@ from keras.utils.vis_utils import plot_model
 
 
 
-class ReflectionPadding2D(layers.Layer):
+class ReflectionPad2D(layers.Layer):
     """Implements Reflection Padding as a layer. Keras does not have a function that achieves this on its own so is 
         implemented through a class that can be called as a layer. Reflection padding uses the contents of the image
         matrices for the padding values. It 'reflects' the row into the padding and therefore ensures that the outputs
@@ -43,56 +43,34 @@ class ReflectionPadding2D(layers.Layer):
         A padded tensor with the same type as the input tensor.
     """
 
-
     def __init__(self, padding=(1, 1), **kwargs):
         self.padding = tuple(padding)
-        super(ReflectionPadding2D, self).__init__(**kwargs)
+        super(ReflectionPad2D, self).__init__(**kwargs)
 
-    def call(self, input_tensor, mask=None):
-        width, height = self.padding
-        pad_output = [
-            [0, 0],
-            [height, height],
-            [width, width],
-            [0, 0],
-        ]
-        return tf.pad(input_tensor, pad_output, mode="REFLECT")
+    def call(self, matrix_in):
+        w, h = self.padding
+        additional_padding = [[0, 0], [h, h], [w, w], [0, 0]]
+        return tf.pad(matrix_in, additional_padding, mode="REFLECT")
 
-
-
-def residual_block(x, activation, kernel_size=(3, 3), strides=(1, 1), padding="valid", use_bias=False):
+    
+def resnet_block(input_layer):
     """Residual block created for a baseline test using the guidance from the 'Unpaired Image-to-image Translation using Cycle-
         consistent Adversarial Networks' paper."""
 
-    dim = x.shape[-1]
-    input_tensor = x
+    features = input_layer.shape[-1]
+    func_input = input_layer
 
-    x = ReflectionPadding2D()(input_tensor)
-    x = layers.Conv2D(dim,kernel_size,strides=strides,padding=padding,use_bias=use_bias,)(x)
-    x = tfa.layers.InstanceNormalization()(x)
-    x = activation(x)
+    res_layer = ReflectionPad2D()(input_layer)
+    res_layer = layers.Conv2D(features, kernel_size=(3, 3), strides=(1, 1), padding="valid", use_bias=False)(res_layer)
+    res_layer = tfa.layers.InstanceNormalization()(res_layer)
+    res_layer = layers.Activation("relu")(res_layer)
+    res_layer = ReflectionPad2D()(res_layer)      
+    res_layer = layers.Conv2D(features, kernel_size=(3, 3), strides=(1, 1), padding="valid", use_bias=False)(res_layer)
+    res_layer = tfa.layers.InstanceNormalization()(res_layer)
+    output = layers.add([input_layer, res_layer])
+    
+    return output
 
-    x = ReflectionPadding2D()(x)
-    x = layers.Conv2D(dim,kernel_size,strides=strides,padding=padding,use_bias=use_bias,)(x)
-    x = tfa.layers.InstanceNormalization()(x)
-    x = layers.add([input_tensor, x])
-    return x
-
-def downsample(x, filters, activation, kernel_size=(3, 3), strides=(2, 2), padding="same", use_bias=False):
-
-    x = layers.Conv2D(filters, kernel_size, strides=strides, padding=padding, use_bias=use_bias)(x)
-    x = tfa.layers.InstanceNormalization()(x)
-    if activation:
-        x = activation(x)
-    return x
-
-def upsample(x, filters, activation, kernel_size=(3, 3), strides=(2, 2), padding="same", use_bias=False):
-
-    x = layers.Conv2DTranspose(filters, kernel_size, strides=strides, padding=padding, use_bias=use_bias)(x)
-    x = tfa.layers.InstanceNormalization()(x)
-    if activation:
-        x = activation(x)
-    return x
 
 
 
@@ -248,39 +226,42 @@ def efficient_block_v2(input, name):
     return x
 
 
-def split_model(model, start, end, name):
+def split_model(net_in, first_layer, last_layer, name):
     """Splits the EfficientNet model based on a range defined by the start and end parameters. Allows all the features of the model remain 
         while only keeping a small portion. The previous implementations relied on manually separating the layers, possibly reducing
-        performance"""    
+        performance"""  
 
-    structure = model.get_config()
-    layers_used = set()
-    for i, l in enumerate(structure['layers']):
+    l_used = set()
+    structure = net_in.get_config()
+    for i, layer in enumerate(structure['layers']):
         if i == 0:
-            structure['layers'][0]['config']['batch_input_shape'] = model.layers[start].input_shape
-            if i != start:
+            structure['layers'][0]['config']['batch_input_shape'] = net_in.layers[first_layer].input_shape
+            if i != first_layer:
                 structure['layers'][0]['name']
                 structure['layers'][0]['config']['name'] = structure['layers'][0]['name']
-        elif i < start or i > end:
+        elif i < first_layer:
             continue
-        layers_used.add(l['name'])
+        elif i > last_layer:
+            continue
+        l_used.add(layer['name'])
 
-    # extract layers to be used 
-    layers = [l for l in structure['layers'] if l['name'] in layers_used]
-    layers[1]['inbound_nodes'][0][0][0] = layers[0]['name']
+    
+    # extract layers to be used
+    l_extracted=[]
+    for l in structure['layers']:
+        if l['name'] in l_used:
+            l_extracted.append(l)
+
+    l_extracted[1]['inbound_nodes'][0][0][0] = l_extracted[0]['name']
 
     # set model structure
-    structure['layers'] = layers
-    structure['input_layers'][0][0] = layers[0]['name']
-    structure['output_layers'][0][0] = layers[-1]['name']
+    structure['layers'] = l_extracted
+    structure['input_layers'][0][0] = l_extracted[0]['name']
+    structure['output_layers'][0][0] = l_extracted[-1]['name']
 
     # create new model
     modelsplit = Model.from_config(structure)
-    for l in modelsplit.layers:
-        orig_l = model.get_layer(l.name)
-        if orig_l is not None:
-            l.set_weights(orig_l.get_weights())
-    
+        
     for layer in modelsplit.layers:
         layer._name = layer.name + str(name)
 
@@ -312,38 +293,38 @@ def efficientnet_generator(filters=64, name=None):
 
     #downsample
     inputs = tf.keras.layers.Input(shape=[256,256,3])
-    x = ReflectionPadding2D(padding=(3, 3))(inputs)
-    x = layers.Conv2D(filters, (7, 7), kernel_initializer=kernel_init, use_bias=False)(x)
-    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
+    x = ReflectionPad2D(padding=(3, 3))(inputs)
+    x = layers.Conv2D(filters, kernel_size=(7, 7))(x)
+    x = tfa.layers.InstanceNormalization()(x)
     x = layers.Activation("relu")(x)
 
-    x = layers.Conv2D(filters,(3,3),strides=(2,2),kernel_initializer=kernel_init,padding='same',use_bias=False,)(x)
-    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
+    x = layers.Conv2D(filters, kernel_size=(3,3),strides=(2,2), padding='same')(x)
+    x = tfa.layers.InstanceNormalization()(x)
     x = layers.Activation("relu")(x)
-    x = layers.Conv2D(144,(3,3),strides=(2,2),kernel_initializer=kernel_init,padding='same',use_bias=False,)(x)
-    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
+    x = layers.Conv2D(144, kernel_size=(3,3), strides=(2,2), padding='same')(x)
+    x = tfa.layers.InstanceNormalization()(x)
     x = layers.Activation("relu")(x)
 
-    x = efficient_block_v3(x, 'block1')
-    x = efficient_block_v3(x, 'block2')
-    x = efficient_block_v3(x, 'block3')
-    x = efficient_block_v3(x, 'block4')
-    x = efficient_block_v3(x, 'block5')
+    eff_1 = efficient_block_v3(x, 'block1')
+    eff_2 = efficient_block_v3(eff_1, 'block2')
+    eff_3 = efficient_block_v3(eff_2, 'block3')
+    eff_4 = efficient_block_v3(eff_3, 'block4')
+    eff_5 = efficient_block_v3(eff_4, 'block5')
     #x = efficient_block_v1(x, 'block6')
     #x = efficient_block_v1(x, 'block7')
     #x = efficient_block_v1(x, 'block8')
     #x = efficient_block_v1(x, 'block9')
 
     # Upsampling
-    x = layers.Conv2DTranspose(64,(3,3),strides=(2,2),padding='same',kernel_initializer=kernel_init,use_bias=False,)(x)
-    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
+    x = layers.Conv2DTranspose(64,kernel_size=(3,3),strides=(2,2),padding='same')(eff_5)
+    x = tfa.layers.InstanceNormalization()(x)
     x = layers.Activation("relu")(x)
-    x = layers.Conv2DTranspose(32,(3,3),strides=(2,2),padding='same',kernel_initializer=kernel_init,use_bias=False,)(x)
-    x = tfa.layers.InstanceNormalization(gamma_initializer=gamma_init)(x)
+    x = layers.Conv2DTranspose(32,kernel_size=(3,3),strides=(2,2),padding='same')(x)
+    x = tfa.layers.InstanceNormalization()(x)
     x = layers.Activation("relu")(x)
 
-    x = ReflectionPadding2D(padding=(3, 3))(x)
-    x = layers.Conv2D(3, (7, 7), padding="valid")(x)
+    x = ReflectionPad2D(padding=(3, 3))(x)
+    x = layers.Conv2D(3, kernel_size=(7, 7), padding="valid")(x)
     x = layers.Activation("tanh")(x)
 
 
@@ -355,14 +336,13 @@ def efficientnet_generator(filters=64, name=None):
     return model
 
 
-def get_resnet_generator(
+def resnet_generator(
     filters=64,
-    num_residual_blocks=5,
-    name=None):
+    num_resnet_blocks=5):
     """Standard ResNet implementation that is used in the CycleGAN paper for a baseline test"""
 
     inputs = tf.keras.layers.Input(shape=[256,256,3])
-    x = ReflectionPadding2D(padding=(3, 3))(inputs)
+    x = ReflectionPad2D(padding=(3, 3))(inputs)
     x = layers.Conv2D(filters, (7, 7), use_bias=False)(
         x
     )
@@ -378,8 +358,8 @@ def get_resnet_generator(
     x = layers.Activation("relu")(x)
 
     # Residual blocks
-    for _ in range(num_residual_blocks):
-        x = residual_block(x, activation=layers.Activation("relu"))
+    for i in range(num_resnet_blocks):
+        x = resnet_block(x)
 
     # Upsampling
     x = layers.Conv2DTranspose(64, kernel_size=(3,3), strides=(2,2), padding="same", use_bias=False)(x)
@@ -390,43 +370,42 @@ def get_resnet_generator(
     x = layers.Activation("relu")(x)
 
     # Final block
-    x = ReflectionPadding2D(padding=(3, 3))(x)
+    x = ReflectionPad2D(padding=(3, 3))(x)
     x = layers.Conv2D(3, (7, 7), padding="valid")(x)
     x = layers.Activation("tanh")(x)
     
 
-    model = keras.models.Model(inputs, x, name=name)
+    model = keras.models.Model(inputs, x)
     
     model.compile()
     model.summary()
     return model
 
 
-def get_discriminator(
+def discriminator(
     filters=64,  
     name=None):
     """Discriminator network based on the CycleGAN paper. Simply an image classifier that downsamples an image input
     and returns a decision"""
     
-    img_input = tf.keras.layers.Input(shape=[256,256,3], name=name + "_img_input")
-    x = layers.Conv2D(filters,(4, 4),strides=(2, 2),padding="same")(img_input)
+    model_input = tf.keras.layers.Input(shape=[256,256,3])
+    x = layers.Conv2D(filters, kernel_size=(4, 4),strides=(2, 2),padding="same")(model_input)
     x = layers.LeakyReLU(0.2)(x)
 
-    num_filters = filters
-    for num_downsample_block in range(3):
-        num_filters *= 2
-        if num_downsample_block < 2:
-            x = layers.Conv2D(num_filters, (4, 4), strides=(2, 2))(x)
+    for i in range(3):
+        filters = filters * 2
+        if i < 2:
+            x = layers.Conv2D(filters, (4, 4), strides=(2, 2))(x)
             x = tfa.layers.InstanceNormalization()(x)
             x = layers.LeakyReLU(0.2)(x)
         else:
-            x = layers.Conv2D(num_filters, (4, 4), strides=(1, 1))(x)
+            x = layers.Conv2D(filters, (4, 4), strides=(1, 1))(x)
             x = tfa.layers.InstanceNormalization()(x)
             x = layers.LeakyReLU(0.2)(x)
 
     x = layers.Conv2D(1, (4, 4), strides=(1, 1), padding="same")(x)
 
-    model = keras.models.Model(inputs=img_input, outputs=x, name=name)
+    model = keras.models.Model(inputs=model_input, outputs=x, name=name)
     model.compile()
     model.summary()
     return model
